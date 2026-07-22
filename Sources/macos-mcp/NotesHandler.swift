@@ -5,6 +5,14 @@ import Foundation
 /// Scripts are piped to osascript via stdin to avoid shell-escaping issues.
 enum NotesHandler {
 
+    // Serial queue — ensures only one osascript process runs against Notes.app at a time.
+    // Concurrent callers block here rather than racing against Notes.app's single-threaded
+    // AppleScript dictionary. The 30s timeout in runAppleScript() caps how long they wait.
+    private static let scriptQueue = DispatchQueue(
+        label: "macos-mcp.notes.osascript",
+        qos: .userInitiated
+    )
+
     // MARK: - Tool handlers
 
     static func createNote(args: [String: Value]) async throws -> String {
@@ -113,6 +121,85 @@ end tell
         return "✓ Appended content to note \"\(noteName)\""
     }
 
+    static func updateNote(args: [String: Value]) async throws -> String {
+        guard let body = args["body"]?.stringValue else {
+            throw notesError("'body' is required")
+        }
+        let noteId    = args["noteId"]?.stringValue
+        let titleArg  = args["title"]?.stringValue
+        let folderArg = args["folder"]?.stringValue
+
+        guard noteId != nil || titleArg != nil else {
+            throw notesError("Either 'noteId' or 'title' must be provided")
+        }
+
+        let safeBody = escapeAppleScript(body)
+        let script: String
+
+        // Notes.app auto-derives the title from the first line of the body when body is set
+        // via AppleScript. We capture the note's name before the update and restore it after
+        // so that notes_update replaces content without silently renaming the note.
+        if let nid = noteId {
+            let safeId = escapeAppleScript(nid)
+            script = """
+tell application "Notes"
+    set targetNote to note id "\(safeId)"
+    set savedName to name of targetNote
+    set body of targetNote to "<div>\(safeBody)</div>"
+    set name of targetNote to savedName
+    return id of targetNote & "|" & name of targetNote
+end tell
+"""
+        } else {
+            let safeTitle = escapeAppleScript(titleArg!)
+            if let folder = folderArg {
+                let safeFolder = escapeAppleScript(folder)
+                script = """
+tell application "Notes"
+    set targetFolder to folder "\(safeFolder)"
+    set matchingNotes to (notes of targetFolder whose name is "\(safeTitle)")
+    if (count of matchingNotes) > 0 then
+        set targetNote to item 1 of matchingNotes
+        set savedName to name of targetNote
+        set body of targetNote to "<div>\(safeBody)</div>"
+        set name of targetNote to savedName
+        return id of targetNote & "|" & name of targetNote
+    else
+        error "No note found with title: \(safeTitle) in folder \(safeFolder)"
+    end if
+end tell
+"""
+            } else {
+                script = """
+tell application "Notes"
+    set allFolders to folders
+    set found to false
+    repeat with fld in allFolders
+        set matchingNotes to (notes of fld whose name is "\(safeTitle)")
+        if (count of matchingNotes) > 0 then
+            set targetNote to item 1 of matchingNotes
+            set savedName to name of targetNote
+            set body of targetNote to "<div>\(safeBody)</div>"
+            set name of targetNote to savedName
+            set found to true
+            return id of targetNote & "|" & name of targetNote
+            exit repeat
+        end if
+    end repeat
+    if not found then
+        error "No note found with title: \(safeTitle)"
+    end if
+end tell
+"""
+            }
+        }
+
+        let result   = try await runAppleScript(script)
+        let parts    = result.split(separator: "|", maxSplits: 1).map(String.init)
+        let noteName = parts.count > 1 ? parts[1] : (titleArg ?? "note")
+        return "✓ Updated note \"\(noteName)\""
+    }
+
     static func listNotes(args: [String: Value]) async throws -> String {
         let folderArg = args["folder"]?.stringValue
         let limit     = args["limit"].asInt ?? 20
@@ -196,7 +283,11 @@ tell application "Notes"
     try
         set noteModified to modification date of targetNote as string
     end try
-    return (id of targetNote) & "||" & (name of targetNote) & "||" & (name of container of targetNote) & "||" & noteModified & "||" & (body of targetNote)
+    set containerName to ""
+    try
+        set containerName to name of container of targetNote
+    end try
+    return (id of targetNote) & "||" & (name of targetNote) & "||" & containerName & "||" & noteModified & "||" & (body of targetNote)
 end tell
 """
         } else {
@@ -359,9 +450,11 @@ end tell
 
     /// Pipes `script` to `/usr/bin/osascript` via stdin. This avoids shell escaping the
     /// script itself; only the embedded user-data strings need AppleScript-level escaping.
+    /// Runs on the serial `scriptQueue` so only one osascript process is active at a time.
+    /// Times out after 30 seconds to prevent the indefinite hang caused by Notes.app App Nap.
     static func runAppleScript(_ script: String) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
+            scriptQueue.async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
 
@@ -372,20 +465,35 @@ end tell
                 process.standardOutput = stdoutPipe
                 process.standardError  = stderrPipe
 
-                // Always close read-ends of stdout/stderr so file descriptors are not
-                // leaked when process.run() throws or on any early-return path.
                 defer {
                     stdoutPipe.fileHandleForReading.closeFile()
                     stderrPipe.fileHandleForReading.closeFile()
                 }
 
                 do {
+                    let t0 = Date()
+                    log("osascript: launching (\(script.count) chars)")
                     try process.run()
+                    log("osascript: process started (pid \(process.processIdentifier))")
+
                     if let data = script.data(using: .utf8) {
                         stdinPipe.fileHandleForWriting.write(data)
                     }
                     stdinPipe.fileHandleForWriting.closeFile()
+                    log("osascript: script written to stdin")
+
+                    // Schedule SIGTERM after 30s on a different queue so it can fire
+                    // while scriptQueue is blocked on waitUntilExit().
+                    let killWork = DispatchWorkItem {
+                        log("osascript: TIMEOUT after 30s — terminating pid \(process.processIdentifier)")
+                        process.terminate()
+                    }
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: killWork)
                     process.waitUntilExit()
+                    killWork.cancel()   // no-op if already fired
+
+                    let elapsed = Date().timeIntervalSince(t0)
+                    log(String(format: "osascript: exited status=%d in %.2fs", process.terminationStatus, elapsed))
 
                     let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
                     let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
@@ -393,6 +501,11 @@ end tell
                     if process.terminationStatus == 0 {
                         let output = String(data: outData, encoding: .utf8) ?? ""
                         continuation.resume(returning: output.trimmingCharacters(in: .whitespacesAndNewlines))
+                    } else if process.terminationReason == .uncaughtSignal {
+                        // process.terminate() sends SIGTERM → terminationReason .uncaughtSignal
+                        continuation.resume(throwing: notesError(
+                            "osascript timed out after 30s — Notes.app may be unresponsive. Please try again."
+                        ))
                     } else {
                         let errMsg = String(data: errData, encoding: .utf8) ?? "osascript error"
                         continuation.resume(throwing: notesError(errMsg.trimmingCharacters(in: .whitespacesAndNewlines)))

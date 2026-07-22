@@ -957,6 +957,33 @@ let allTools: [Tool] = [
     ),
 
     Tool(
+        name: "notes_update",
+        description: "Replace the complete body of an existing note (uses osascript). Identify by noteId or title.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "noteId": .object([
+                    "type": .string("string"),
+                    "description": .string("AppleScript note ID (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Title of the note (used when noteId is absent).")
+                ]),
+                "folder": .object([
+                    "type": .string("string"),
+                    "description": .string("Narrow the title search to a specific folder.")
+                ]),
+                "body": .object([
+                    "type": .string("string"),
+                    "description": .string("New body content — replaces the entire existing body (max 100,000 chars).")
+                ])
+            ]),
+            "required": .array([.string("body")])
+        ])
+    ),
+
+    Tool(
         name: "notes_delete",
         description: "Delete a note from the macOS Notes app (uses osascript). Identify by noteId or title.",
         inputSchema: .object([

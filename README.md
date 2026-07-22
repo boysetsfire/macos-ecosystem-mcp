@@ -27,10 +27,14 @@ This Swift rewrite:
 - `calendar_update_event` — Modify existing events
 - `calendar_delete_event` — Delete events
 
-### 📝 Notes (3 tools — osascript)
+### 📝 Notes (7 tools — osascript)
+- `notes_list` — List notes (all or by folder, with pagination)
+- `notes_get` — Retrieve a note's full content
 - `notes_create` — Create notes with title and body (HTML supported)
 - `notes_append` — Append content to existing notes
+- `notes_update` — Replace the complete body of an existing note
 - `notes_search` — Search notes by keyword
+- `notes_delete` — Delete a note
 
 ## Requirements
 
@@ -185,6 +189,14 @@ Restart Claude Desktop after editing the config.
 | title | string | (one of) | Note title |
 | folder | string | | Narrow search |
 | content | string | ✓ | Content to append |
+
+### notes_update
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| noteId | string | (one of) | AppleScript note ID |
+| title | string | (one of) | Note title |
+| folder | string | | Narrow search to folder |
+| body | string | ✓ | New body — replaces entire existing content |
 
 ### notes_search
 | Parameter | Type | Required | Default | Description |

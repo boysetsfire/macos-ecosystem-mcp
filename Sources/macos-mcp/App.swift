@@ -3,8 +3,17 @@ import Foundation
 
 @main
 struct MacOSMCPApp {
+    // Held for process lifetime — prevents App Nap on this process and keeps Notes.app
+    // responsive for osascript calls after idle periods. Releasing this token re-enables
+    // power management, so it must never go out of scope.
+    private static var _activityToken: NSObjectProtocol? = nil
+
     static func main() async throws {
-        log("Starting macOS Ecosystem MCP Server v0.6.1 (Swift/EventKit/Contacts)")
+        _activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "macos-mcp — keep Notes.app responsive for MCP scripting"
+        )
+        log("Starting macOS Ecosystem MCP Server v0.7.0 (Swift/EventKit/Contacts)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
@@ -16,7 +25,7 @@ struct MacOSMCPApp {
 
         let server = Server(
             name: "macos-ecosystem-mcp",
-            version: "0.6.1",
+            version: "0.7.0",
             capabilities: Server.Capabilities(
                 tools: .init(listChanged: false)
             )
@@ -30,7 +39,7 @@ struct MacOSMCPApp {
             await dispatch(params: params, ekManager: ekManager, cnManager: cnManager)
         }
 
-        log("All 29 tools registered, connecting stdio transport")
+        log("All 30 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -107,6 +116,8 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
                 return try await NotesHandler.createNote(args: params.arguments ?? [:])
             case "notes_append":
                 return try await NotesHandler.appendNote(args: params.arguments ?? [:])
+            case "notes_update":
+                return try await NotesHandler.updateNote(args: params.arguments ?? [:])
             case "notes_delete":
                 return try await NotesHandler.deleteNote(args: params.arguments ?? [:])
             case "notes_search":
@@ -132,6 +143,9 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
 
 // MARK: - Logging helper (all output goes to stderr; stdout is reserved for MCP protocol)
 
+private let _logStart = Date()
+
 func log(_ message: String) {
-    fputs("[macos-mcp] \(message)\n", stderr)
+    let elapsed = Date().timeIntervalSince(_logStart)
+    fputs(String(format: "[macos-mcp %+.3fs] %@\n", elapsed, message), stderr)
 }
