@@ -89,6 +89,22 @@ Danach Claude Desktop neu starten.
 Alternativ: "Sync fork"-Button auf der GitHub-Fork-Seite nutzen, danach lokal nur noch
 `git pull origin main`.
 
+### Merge-Checkliste nach Upstream-Update
+
+Nach jedem `git merge upstream/main` diese Fork-eigenen Änderungen auf Konflikte prüfen:
+
+| Datei | Was wir geändert haben |
+|---|---|
+| `Sources/macos-mcp/NotesHandler.swift` | `scriptQueue` (serial queue, Z. 7–11), `updateNote()` (neues Tool), `runAppleScript()` (30s-Timeout + Timing-Logs), `getNote()` by noteId (try-Block um `name of container`) |
+| `Sources/macos-mcp/App.swift` | `_activityToken` (App-Nap-Prevention), `log()` (Timestamps), Dispatch-Case `notes_update`, Tool-Count |
+| `Sources/macos-mcp/ToolDefinitions.swift` | Tool-Definition `notes_update` (nach `notes_append`) |
+| `Tests/e2e_notes_test.py` | Neu — kein Upstream-Konflikt möglich |
+| `SETUP-NOTES.md` | Neu — kein Upstream-Konflikt möglich |
+
+Bei Konflikten in den Swift-Dateien: Upstream-Änderungen übernehmen, dann unsere
+Ergänzungen manuell neu einspielen. Danach `python3 Tests/e2e_notes_test.py` laufen
+lassen — alle 16 Tests grün = Merge korrekt.
+
 ## Update-Benachrichtigungen
 
 GitHub-Watch auf dem Original-Repo (`neverprepared/macos-ecosystem-mcp`) aktiv:
