@@ -32,11 +32,35 @@ This Swift rewrite:
 - `notes_append` — Append content to existing notes
 - `notes_search` — Search notes by keyword
 
+### 💬 iMessage (4 tools — SQLite reads + osascript sends)
+- `imessage_list_chats` — List recent conversations with participants and a last-message preview
+- `imessage_read` — Read a conversation by `chat_guid` or `handle`; includes attachment paths
+- `imessage_search` — Search message text across all conversations
+- `imessage_send` — Send text and/or a file attachment to an **allowlisted** contact
+
+Reads query the local `~/Library/Messages/chat.db` directly (read-only). Sends go
+through AppleScript and are gated by a **fail-closed contact allowlist** — sending
+is disabled until you configure one:
+
+- Env var: `MACOS_MCP_IMESSAGE_ALLOWLIST="+15551234567,friend@example.com"`
+- And/or file `~/.config/macos-mcp/imessage-allowlist.json`:
+  ```json
+  { "allow": ["+15551234567", "friend@example.com"] }
+  ```
+
+Phone numbers are matched loosely (last 10 digits), so formatting/country-code
+differences still match. Attachments from protected directories (the config dir,
+`~/Library/Messages`) are refused.
+
 ## Requirements
 
 - macOS 13 Ventura or later
 - Xcode 15+ / Swift 5.9+ (build only)
-- Reminders, Calendar, and Notes access granted in **System Settings → Privacy & Security**
+- Reminders, Calendar, Contacts, and Notes access granted in **System Settings → Privacy & Security**
+- **Full Disk Access** for the app running this server (Terminal, your MCP client, etc.) —
+  required to read `chat.db` and to send via Messages. Grant it under
+  **System Settings → Privacy & Security → Full Disk Access**. Without it, the iMessage
+  tools return an actionable error.
 
 ## Build from Source
 

@@ -1003,5 +1003,100 @@ let allTools: [Tool] = [
             ]),
             "required": .array([.string("query")])
         ])
+    ),
+
+    // ── iMessage ─────────────────────────────────────────────────────────────
+
+    Tool(
+        name: "imessage_list_chats",
+        description: "List the most recent iMessage/SMS conversations (newest first) with participants and a preview of the last message. Reads the local Messages database (requires Full Disk Access).",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum conversations to return (1–100). Defaults to 20."),
+                    "minimum": .int(1),
+                    "maximum": .int(100),
+                    "default": .int(20)
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
+        name: "imessage_read",
+        description: "Read messages from a conversation, identified by chat_guid (from imessage_list_chats, precise) or handle (phone number / Apple ID). Includes attachment file paths. Reads the local Messages database (requires Full Disk Access).",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "chat_guid": .object([
+                    "type": .string("string"),
+                    "description": .string("The chat guid from imessage_list_chats (preferred, precise).")
+                ]),
+                "handle": .object([
+                    "type": .string("string"),
+                    "description": .string("A phone number or Apple ID to read the conversation with (used when chat_guid is absent).")
+                ]),
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum messages to return, newest kept (1–200). Defaults to 25."),
+                    "minimum": .int(1),
+                    "maximum": .int(200),
+                    "default": .int(25)
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
+        name: "imessage_search",
+        description: "Search message text across all conversations (case-insensitive). Optionally filter to messages received from a specific handle. Reads the local Messages database (requires Full Disk Access).",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "query": .object([
+                    "type": .string("string"),
+                    "description": .string("Text to search for (required).")
+                ]),
+                "handle": .object([
+                    "type": .string("string"),
+                    "description": .string("Optional phone number / Apple ID — restrict to messages received from this contact.")
+                ]),
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum results (1–200). Defaults to 25."),
+                    "minimum": .int(1),
+                    "maximum": .int(200),
+                    "default": .int(25)
+                ])
+            ]),
+            "required": .array([.string("query")])
+        ])
+    ),
+
+    Tool(
+        name: "imessage_send",
+        description: "Send an iMessage (text and/or a file attachment) to a contact. The recipient MUST be on the send allowlist (MACOS_MCP_IMESSAGE_ALLOWLIST env var or ~/.config/macos-mcp/imessage-allowlist.json); sending is disabled when no allowlist is configured. Requires Full Disk Access and that Messages is signed in.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "to": .object([
+                    "type": .string("string"),
+                    "description": .string("Recipient phone number (e.g. +15551234567) or Apple ID email (required). Must be allowlisted.")
+                ]),
+                "text": .object([
+                    "type": .string("string"),
+                    "description": .string("Message text to send. Provide text and/or file_path.")
+                ]),
+                "file_path": .object([
+                    "type": .string("string"),
+                    "description": .string("Absolute path to a file to send as an attachment. Paths inside protected directories are rejected.")
+                ])
+            ]),
+            "required": .array([.string("to")])
+        ])
     )
 ]

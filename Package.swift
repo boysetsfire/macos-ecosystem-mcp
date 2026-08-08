@@ -21,7 +21,8 @@ let package = Package(
             path: "Sources/macos-mcp",
             linkerSettings: [
                 .linkedFramework("CoreLocation"),
-                .linkedFramework("Contacts")
+                .linkedFramework("Contacts"),
+                .linkedLibrary("sqlite3")
             ]
         )
     ]
