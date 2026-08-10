@@ -13,11 +13,12 @@ struct MacOSMCPApp {
             options: [.userInitiated, .idleSystemSleepDisabled],
             reason: "macos-mcp — keep Notes.app responsive for MCP scripting"
         )
-        log("Starting macOS Ecosystem MCP Server v0.7.0 (Swift/EventKit/Contacts)")
+        log("Starting macOS Ecosystem MCP Server v0.7.0 (Swift/EventKit/Contacts/Messages)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
         let cnManager = ContactsManager()
+        let msgManager = MessagesManager()
         await ekManager.requestPermissions()
         await cnManager.requestPermissions()
 
@@ -36,10 +37,10 @@ struct MacOSMCPApp {
         }
 
         await server.withMethodHandler(CallTool.self) { params in
-            await dispatch(params: params, ekManager: ekManager, cnManager: cnManager)
+            await dispatch(params: params, ekManager: ekManager, cnManager: cnManager, msgManager: msgManager)
         }
 
-        log("All 30 tools registered, connecting stdio transport")
+        log("All 34 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -49,7 +50,7 @@ struct MacOSMCPApp {
 
 // MARK: - Tool dispatcher
 
-private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, cnManager: ContactsManager) async -> CallTool.Result {
+private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, cnManager: ContactsManager, msgManager: MessagesManager) async -> CallTool.Result {
     do {
         let text: String = try await {
             switch params.name {
@@ -122,6 +123,16 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
                 return try await NotesHandler.deleteNote(args: params.arguments ?? [:])
             case "notes_search":
                 return try await NotesHandler.searchNotes(args: params.arguments ?? [:])
+
+            // ── iMessage ───────────────────────────────────────────────────
+            case "imessage_list_chats":
+                return try await msgManager.listChats(args: params.arguments ?? [:])
+            case "imessage_read":
+                return try await msgManager.readMessages(args: params.arguments ?? [:])
+            case "imessage_search":
+                return try await msgManager.searchMessages(args: params.arguments ?? [:])
+            case "imessage_send":
+                return try await msgManager.sendMessage(args: params.arguments ?? [:])
 
             default:
                 return "Unknown tool: \(params.name)"

@@ -465,6 +465,8 @@ end tell
                 process.standardOutput = stdoutPipe
                 process.standardError  = stderrPipe
 
+                // Always close read-ends of stdout/stderr so file descriptors are not
+                // leaked when process.run() throws or on any early-return path.
                 defer {
                     stdoutPipe.fileHandleForReading.closeFile()
                     stderrPipe.fileHandleForReading.closeFile()
