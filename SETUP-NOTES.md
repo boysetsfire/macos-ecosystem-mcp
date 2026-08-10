@@ -105,6 +105,20 @@ Bei Konflikten in den Swift-Dateien: Upstream-Änderungen übernehmen, dann unse
 Ergänzungen manuell neu einspielen. Danach `python3 Tests/e2e_notes_test.py` laufen
 lassen — alle 16 Tests grün = Merge korrekt.
 
+**2026-08-10 (v0.7.0-Merge):** Upstream brachte im selben Versionssprung eigene
+`v0.7.0`-Commits (iMessage-Tools: `imessage_list_chats/read/search/send`,
+`MessagesManager.swift`, `sqlite3`-Linking). Konflikte gab es in `Package.swift`,
+`Formula/*.rb`, `App.swift`, `ToolDefinitions.swift`, `NotesHandler.swift` — jeweils
+beide Seiten behalten (unsere Fixes + `notes_update` und Upstreams iMessage-Tools).
+`Formula/*.rb` zeigt auf Upstream-Releases und wird nicht von uns genutzt (wir bauen
+lokal) — bei Konflikten dort einfach Upstream-Stand übernehmen.
+
+**Wichtig:** iMessage-Tools brauchen **Vollzugriff auf Festplatte** (Full Disk Access)
+für `macos-mcp`, da sie `chat.db` direkt lesen — neuer, weiterreichender
+Berechtigungstyp als die bisherige Notes/Calendar/Reminders-Automation. Nach dem
+nächsten Deploy unter System­einstellungen → Datenschutz & Sicherheit → Vollzugriff
+auf Festplatte freigeben.
+
 ## Update-Benachrichtigungen
 
 GitHub-Watch auf dem Original-Repo (`neverprepared/macos-ecosystem-mcp`) aktiv:
