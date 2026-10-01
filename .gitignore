@@ -38,3 +38,10 @@ pnpm-lock.yaml
 # Temporary
 *.tmp
 .temp/
+
+# Konfig-Exporte und Schlüsseldateien: nie committen
+*.unf
+*.dss
+*.pfx
+*.p12
+*.kdbx
